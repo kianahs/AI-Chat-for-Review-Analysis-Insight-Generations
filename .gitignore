@@ -1,0 +1,23 @@
+# Ignore common temporary files and folders
+.idea.md
+secrets.json
+sources.txt
+dataset_cache
+utility/
+
+# Ignore virtual environment
+.venv
+
+# Ignore Python cache files and folders
+__pycache__/
+*.py[cod]
+
+# Ignore Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Ignore logs and temporary files
+*.log
+*.tmp
+
+# Ignore environment variable files
+.env
