@@ -1,96 +1,123 @@
-from dotenv import load_dotenv
-from langchain import hub
-from langchain.agents import AgentExecutor, create_structured_chat_agent
-from langchain.memory import ConversationBufferMemory
-from langchain_core.messages import AIMessage, HumanMessage
-from langchain_core.tools import Tool
-from langchain_openai import ChatOpenAI
+from google.cloud import bigquery
+import os
+from langchain.agents import initialize_agent, Tool
+from langchain_community.utilities import SQLDatabase
+from langchain_community.chat_models import ChatOpenAI
+from langchain_experimental.sql import SQLDatabaseChain
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.prompts import ChatPromptTemplate
-from analyze import Calculate_Overall_Sentiment_Distribution
+from langchain.prompts import PromptTemplate
 
-# Load environment variables from .env file
-load_dotenv()
-
-
-def get_overall_sentiment_distribution(query):
-    """Calculates the overall sentiment distribution."""
-    print("Sentiment Distribution tool invoked.")  # Debugging log
-    res = Calculate_Overall_Sentiment_Distribution()
-    return res
+from utility.bigquery_config import setup_bigquery_config
+config = setup_bigquery_config()
+project_id = config["project_id"]
+dataset_id = config["dataset_id"]
 
 
-def get_current_time(query):
-    """Returns the current time in H:MM AM/PM format. The 'unused_input' can be safely ignored."""
-    import datetime
-    now = datetime.datetime.now()
-    return now.strftime("%I:%M %p")
+# BigQuery SQLAlchemy URI
+bigquery_uri = f"bigquery://{project_id}/{dataset_id}"
+
+# sql_prompt = """
+# You are an expert SQL assistant working with a BigQuery database.
+
+# ### Database Schema:
+# - **Reviews**
+#   - (id, rating, title, text, asin, parent_asin,
+#      helpful_vote, timestamp, verified_purchase)
+#   - `id` is the primary key.
+#   - `parent_asin` is a foreign key referencing `Products.parent_asin`.
+
+# - **Products**
+#   - (id, main_category, title, features, price, description,
+#      parent_asin, average_rating, rating_number)
+#   - `parent_asin` is the primary key, referenced by `Reviews.parent_asin`.
+#   - `id` is the primary key.
+
+# - **Sentiments**
+#   - (id, summary, sentiment)
+#   - `id` is a foreign key referencing `Reviews.id`.
+
+# ### Guidelines:
+# - **Use correct table and column names.**
+# - **Use `JOIN` when necessary**
+#   - Example: `Reviews.id = Sentiments.id` for sentiment analysis.
+#   - Example: `Reviews.parent_asin = Products.parent_asin` to get product details.
+# - **Use aggregation functions (`COUNT()`, `AVG()`, `SUM()`) where appropriate.**
+# - **Use `GROUP BY` for sentiment distribution or category-based stats.**
+# - **Filter with `WHERE` when needed**
+#   - Example: `WHERE verified_purchase = TRUE` for verified purchases only.
+#   - Example: `WHERE timestamp >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 YEAR)` for last year's reviews.
+
+#   Your task is to answer natural language queries using this database schema.
+#   Please respond with SQL queries that will extract the necessary data from these tables. If the query is complex, try to break it down into multiple steps.
+# """
+# prompt_template = PromptTemplate(
+#     input_variables=["user_input"], template=sql_prompt)
 
 
-def search_wikipedia(query):
-
-    from wikipedia import summary
-
-    try:
-
-        return summary(query, sentences=2)
-    except:
-        return "I couldn't find any information on that."
+db = SQLDatabase.from_uri(bigquery_uri)
 
 
-tools = [
-    Tool(
-        name="Time",
-        func=get_current_time,
-        description="Use this tool to get the current time. The input is not necessary, you can pass anything.",
-    ),
-    Tool(
-        name="Wikipedia",
-        func=search_wikipedia,
-        description="Useful for when you need to know information about a topic.",
-    ),
+sql_tool = Tool(
+    name="BigQueryTool",
+    func=SQLDatabaseChain.from_llm(
+        llm=ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0),
+        db=db,
+        # prompt=prompt_template
+    ).run,
+    description='''Use this tool to query the BigQuery database. Input should be a natural language question about the data.
+        ### Database Schema:
+        - **Reviews**
+        - (id, rating, title, text, asin, parent_asin,
+            helpful_vote, timestamp, verified_purchase)
+        - `id` is the primary key.
+        - `parent_asin` is a foreign key referencing `Products.parent_asin`.
 
-    Tool(
-        name="Sentiment Distribution",
-        func=get_overall_sentiment_distribution,
-        description="Calculates the overall sentiment distribution from the pre-existing dataset. No input is required. You can call it without providing any input.",
-    )
-]
+        - **Products**
+        - (id, main_category, title, features, price, description,
+            parent_asin, average_rating, rating_number)
+        - `parent_asin` is the primary key, referenced by `Reviews.parent_asin`.
+        - `id` is the primary key.
 
-# Define the Prompt
-prompt = ChatPromptTemplate.from_messages([
-    ("system", "Respond to the human as helpfully and accurately as possible. You have access to the following tools:\n\n{tools}\n\nUse a json blob to specify a tool by providing an action key (tool name) and an action_input key (tool input).\n\nValid \"action\" values: \"Final Answer\" or {tool_names}\n\nProvide only ONE action per $JSON_BLOB, as shown:\n\n```\n{{\n\"action\": $TOOL_NAME,\n\"action_input\": $INPUT\n}}\n```\n\nFollow this format:\n\nQuestion: input question to answer\nThought: consider previous and subsequent steps\nAction:\n```\n$JSON_BLOB\n```\nObservation: action result\n... (repeat Thought/Action/Observation N times)\nThought: I know what to respond\nAction:\n```\n{{\n\"action\": \"Final Answer\",\n\"action_input\": \"Final response to human\"\n}}\n\nBegin! Reminder to ALWAYS respond with a valid json blob of a single action. Use tools if necessary. Respond directly if appropriate. Format is Action:```$JSON_BLOB```then Observation"),
-    ("placeholder", "{chat_history}"),
-    ("human", "{input}\n\n{agent_scratchpad}\n(reminder to respond in a JSON blob no matter what)"),
-])
-
-
-llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash")
-
-
-memory = ConversationBufferMemory(
-    memory_key="chat_history", return_messages=True
+        - **Sentiments**
+        - (id, summary, sentiment)
+        - `id` is a foreign key referencing `Reviews.id`.
+        
+        ### Guidelines:
+        - **Use correct table and column names.**
+        - **Use `JOIN` when necessary**
+        - Example: `Reviews.id = Sentiments.id` for sentiment analysis.
+        - Example: `Reviews.parent_asin = Products.parent_asin` to get product details.
+        - **Use aggregation functions (`COUNT()`, `AVG()`, `SUM()`) where appropriate.**
+        - **Use `GROUP BY` for sentiment distribution or category-based stats.**
+        - **Filter with `WHERE` when needed**
+        - Example: `WHERE verified_purchase = TRUE` for verified purchases only.
+        - Example: `WHERE timestamp >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 YEAR)` for last year's reviews.
+        '''
 )
 
-agent = create_structured_chat_agent(llm=llm, tools=tools, prompt=prompt)
 
-agent_executor = AgentExecutor.from_agent_and_tools(
-    agent=agent,
-    tools=tools,
-    verbose=True,
-    memory=memory,
-    handle_parsing_errors=True,
+agent = initialize_agent(
+    tools=[sql_tool],
+    llm=ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0),
+    agent="zero-shot-react-description",
+    verbose=True
 )
 
+
+print("Welcome to the BigQuery conversational assistant!")
+print("You can ask me questions about your data, like 'What is the total revenue in 2024?' or 'Show me sales from last month.'")
+print("Type 'exit' to end the conversation.\n")
 
 while True:
-    user_input = input("User: ")
+
+    user_input = input("You: ")
+
     if user_input.lower() == "exit":
+        print("Goodbye!")
         break
 
-    memory.chat_memory.add_message(HumanMessage(content=user_input))
-
-    response = agent_executor.invoke({"input": user_input})
-    print("Bot:", response["output"])
-
-    memory.chat_memory.add_message(AIMessage(content=response["output"]))
+    try:
+        response = agent.run(user_input)
+        print(f"Agent: {response}\n")
+    except Exception as e:
+        print(f"Agent: Sorry, I encountered an error: {e}\n")

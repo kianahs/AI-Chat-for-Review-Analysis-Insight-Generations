@@ -8,34 +8,53 @@ from sklearn.feature_extraction.text import CountVectorizer
 from collections import Counter
 from wordcloud import WordCloud
 
+import matplotlib.pyplot as plt
+import seaborn as sns
+import os
 
-def Calculate_Overall_Sentiment_Distribution():
 
-    sentiment_distribution = get_overall_sentiment_distribution()
+def Calculate_Overall_Sentiment_Distribution(product_id=None):
+    if product_id:
+        sentiment_distribution = get_overall_sentiment_distribution(product_id)
 
-    return sentiment_distribution
-    # sentiment_distribution.set_index('sentiment', inplace=True)
+    else:
 
-    # # PIE CHART
-    # plt.figure(figsize=(6, 6))
-    # sentiment_distribution['value'].plot.pie(
-    #     autopct='%1.1f%%', startangle=90, colors=['lightgreen', 'lightcoral']
-    # )
-    # plt.title('Overall Sentiment Distribution')
-    # plt.ylabel('')
-    # plt.show()
+        sentiment_distribution = get_overall_sentiment_distribution()
 
-    # # BAR CHART
-    # plt.figure(figsize=(8, 5))
-    # sns.barplot(
-    #     x=sentiment_distribution.index,
-    #     y=sentiment_distribution['value'],
-    #     palette=['lightgreen', 'lightcoral']
-    # )
-    # plt.title('Overall Sentiment Distribution')
-    # plt.xlabel('Sentiment')
-    # plt.ylabel('Number of Reviews')
-    # plt.show()
+    output_dir = "charts"
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    # PIE CHART
+    plt.figure(figsize=(6, 6))
+    sentiment_distribution['value'].plot.pie(
+        autopct='%1.1f%%', startangle=90, colors=['lightgreen', 'lightcoral']
+    )
+    plt.title('Overall Sentiment Distribution')
+    plt.ylabel('')
+
+    pie_chart_path = os.path.join(
+        output_dir, 'overall_sentiment_pie_chart.png')
+    plt.savefig(pie_chart_path)
+    plt.close()
+
+    # BAR CHART
+    plt.figure(figsize=(8, 5))
+    sns.barplot(
+        x=sentiment_distribution.index,
+        y=sentiment_distribution['value'],
+        palette=['lightgreen', 'lightcoral']
+    )
+    plt.title('Overall Sentiment Distribution')
+    plt.xlabel('Sentiment')
+    plt.ylabel('Number of Reviews')
+
+    bar_chart_path = os.path.join(
+        output_dir, 'overall_sentiment_bar_chart.png')
+    plt.savefig(bar_chart_path)
+    plt.close()
+
+    return sentiment_distribution, pie_chart_path, bar_chart_path
 
 
 def Calculate_overall_sentiment_trends_over_time():
@@ -173,4 +192,4 @@ def get_common_themes_in_different_reviews():
 
 if __name__ == "__main__":
 
-    Calculate_Overall_Sentiment_Distribution()
+    print(Calculate_Overall_Sentiment_Distribution('069267599X'))

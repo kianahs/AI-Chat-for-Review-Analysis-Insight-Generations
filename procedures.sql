@@ -20,7 +20,17 @@ FROM
         r.id = s.id;
 END;
 
-
+CREATE PROCEDURE `customers-reviews-database.amazon_db.GetOverallSentimentDistributionPerProductID` (IN i_id STRING)
+BEGIN
+    SELECT 
+        COUNT(S.id) AS value, 
+        S.sentiment  
+    FROM `customers-reviews-database.amazon_db.Sentiments` AS S
+    JOIN `customers-reviews-database.amazon_db.Reviews` AS R
+    ON S.id = R.id
+    WHERE R.parent_asin = i_id
+    GROUP BY S.sentiment;
+END;
 
 CREATE PROCEDURE GetReviewsBySentiment(IN VARCHAR(256) i_sentiment)
 BEGIN
