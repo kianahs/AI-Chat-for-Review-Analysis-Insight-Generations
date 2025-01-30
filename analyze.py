@@ -192,4 +192,5 @@ def get_common_themes_in_different_reviews():
 
 if __name__ == "__main__":
 
-    print(Calculate_Overall_Sentiment_Distribution('069267599X'))
+    # print(Calculate_Overall_Sentiment_Distribution('069267599X'))
+    Calculate_overall_sentiment_trends_over_time()

@@ -70,6 +70,54 @@ db = SQLDatabase.from_uri(bigquery_uri)
 #     input_variables=["user_input"], template=sql_prompt)
 
 
+def get_overall_sentiment_trends_over_time(query):
+
+    print(f'query is {query}')
+    session = Session()
+
+    try:
+
+        stored_procedure_query = f"""
+        CALL `{project_id}.{dataset_id}.GetOverallSentimentTrendsData`();
+        """
+        stored_procedure_query = text(
+            stored_procedure_query)
+
+        result = session.execute(stored_procedure_query)
+        results_set = result.fetchall()
+
+        results_list = []
+        for row in results_set:
+
+            results_list.append(
+                {"id": row[0], "timestamp": row[1], "sentiment": row[2]})
+
+        df = pd.DataFrame(results_list)
+
+        sentiment_mapping = {'POSITIVE': 1, 'NEUTRAL': 0, 'NEGATIVE': -1}
+        df['sentiment_score'] = df['sentiment'].map(sentiment_mapping)
+
+        # Convert timestamp to datetime and extract monthly periods (timestamps are in milliseconds)
+        df['date'] = pd.to_datetime(df['timestamp'], unit='ms')
+        df['month'] = df['date'].dt.to_period('M')
+
+        # Group by month and calculate average sentiment score
+        monthly_sentiment = df.groupby(
+            'month')['sentiment_score'].mean().reset_index()
+
+        # Convert the Period data to string for plotting
+        monthly_sentiment['month'] = monthly_sentiment['month'].astype(str)
+
+        # print(monthly_sentiment)
+
+        return monthly_sentiment
+    except Exception as e:
+        return f"Error calling stored procedure: {e}"
+
+    finally:
+        session.close()
+
+
 def get_sentiment_distribution(query):
     print(f'query is {query}')
     session = Session()
@@ -138,6 +186,11 @@ sentiment_tool = Tool(
     func=get_sentiment_distribution,
     description="Calculates sentiment distribution from the Sentiments table."
 )
+trend_sentiment_tool = Tool(
+    name="TrendSentimentAnalysisTool",
+    func=get_overall_sentiment_trends_over_time,
+    description="Calculates overall sentiment trend over time like month from the Sentiments table."
+)
 product_sentiment_tool = Tool(
     name="ProductSentimentAnalysisTool",
     func=get_sentiment_distribution_for_product,
@@ -185,7 +238,8 @@ sql_tool = Tool(
 
 
 agent = initialize_agent(
-    tools=[sql_tool, sentiment_tool, product_sentiment_tool],
+    tools=[sql_tool, sentiment_tool,
+           product_sentiment_tool, trend_sentiment_tool],
     llm=ChatGoogleGenerativeAI(
         model="gemini-1.5-flash", temperature=0, api_key=google_api_key),
     agent="zero-shot-react-description",
@@ -194,7 +248,8 @@ agent = initialize_agent(
 
 
 print('''Welcome to the BigQuery conversational assistant!\n
-You can ask me questions about your data, like 'What is the total revenue in 2024?' or 'Show me sales from last month. \n
+You can ask me questions about your data, like 'What is the total revenue in 2024?'
+or 'Show me sales from last month. \n
 Type 'exit' to end the conversation.\n''')
 
 while True:
