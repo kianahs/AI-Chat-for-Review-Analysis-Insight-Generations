@@ -247,23 +247,59 @@ agent = initialize_agent(
 )
 
 
-print('''Welcome to the BigQuery conversational assistant!\n
-You can ask me questions about your data, like 'What is the total revenue in 2024?'
-or 'Show me sales from last month. \n
-Type 'exit' to end the conversation.\n''')
+# print('''Welcome to the BigQuery conversational assistant!\n
+# You can ask me questions about your data, like 'What is the total revenue in 2024?'
+# or 'Show me sales from last month. \n
+# Type 'exit' to end the conversation.\n''')
 
-while True:
+# while True:
 
-    user_input = input("You: ")
+#     user_input = input("You: ")
 
-    if user_input.lower() == "exit":
-        print("Goodbye!")
-        break
+#     if user_input.lower() == "exit":
+#         print("Goodbye!")
+#         break
 
+#     try:
+#         # response = agent.run(user_input)
+#         response = agent.invoke(user_input)
+
+#         print(f"Agent: {response}\n")
+#     except Exception as e:
+#         print(f"Agent: Sorry, I encountered an error: {e}\n")
+
+
+# Streamlit UI
+# Streamlit UI
+st.set_page_config(page_title="Chatbot", page_icon="💬", layout="wide")
+st.title("💬 Assistant Chatbot")
+st.markdown("Chat with your BigQuery database using AI-powered insights.")
+
+# Initialize session state
+if "messages" not in st.session_state:
+    st.session_state["messages"] = []
+
+# Display message history
+for message in st.session_state["messages"]:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+# User input
+user_input = st.chat_input("Ask something about your database...")
+if user_input:
+    st.session_state["messages"].append(
+        {"role": "user", "content": user_input})
+    with st.chat_message("user"):
+        st.markdown(user_input)
+
+    # Get response from the agent
     try:
-        # response = agent.run(user_input)
         response = agent.invoke(user_input)
-
-        print(f"Agent: {response}\n")
     except Exception as e:
-        print(f"Agent: Sorry, I encountered an error: {e}\n")
+        response = f"Error: {e}"
+
+    # Display response
+    st.session_state["messages"].append(
+        {"role": "assistant", "content": response['output']})
+    with st.chat_message("assistant"):
+        st.markdown(response['output'])
