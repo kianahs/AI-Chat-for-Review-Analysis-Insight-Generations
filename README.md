@@ -95,7 +95,7 @@ The repository consists of three main components:
 
 Here is the runtime image showing the setup of the container for the application:
 
-![Runtime Image](response_example\runtime.png)
+![Runtime Image](response_example/runtime.png)
 
 
 
