@@ -98,10 +98,6 @@ Here is the runtime image showing the setup of the container for the application
 ![Runtime Image](response_example/runtime.png)
 
 
-
-## Contributing
-Contributions are welcome! Please open an issue or submit a pull request.
-
 ## License
 This project is licensed under the MIT License.
 
