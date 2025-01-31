@@ -1,30 +1,30 @@
 from sqlalchemy import text
 from langchain.tools import Tool
-from collections import Counter
+# from collections import Counter
 from dotenv import load_dotenv
-from google.cloud import bigquery
+# from google.cloud import bigquery
 import os
 from langchain.agents import initialize_agent, Tool
 from langchain_community.utilities import SQLDatabase
-from langchain_community.chat_models import ChatOpenAI
+# from langchain_community.chat_models import ChatOpenAI
 from langchain_experimental.sql import SQLDatabaseChain
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.prompts import PromptTemplate
+# from langchain.prompts import PromptTemplate
 import streamlit as st
 import pandas as pd
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-import re
+# import re
 import ast
 from langchain.memory import ConversationBufferMemory
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from utility.bigquery_config import setup_bigquery_config
 
 
-config = setup_bigquery_config()
-project_id = config["project_id"]
-dataset_id = config["dataset_id"]
 load_dotenv()
+google_credentials = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = google_credentials
+project_id = os.getenv("PROJECT_ID")
+dataset_id = os.getenv("DATASET_ID")
 google_api_key = os.getenv("GOOGLE_API_KEY")
 
 
@@ -73,6 +73,7 @@ db = SQLDatabase.from_uri(bigquery_uri)
 
 
 def get_overall_sentiment_trends_over_time(query):
+
     print(f'query is {query}')
     session = Session()
 
