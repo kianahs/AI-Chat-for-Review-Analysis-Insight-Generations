@@ -16,9 +16,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 import re
 import ast
-
-
+from langchain.memory import ConversationBufferMemory
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from utility.bigquery_config import setup_bigquery_config
+
+
 config = setup_bigquery_config()
 project_id = config["project_id"]
 dataset_id = config["dataset_id"]
@@ -71,7 +73,6 @@ db = SQLDatabase.from_uri(bigquery_uri)
 
 
 def get_overall_sentiment_trends_over_time(query):
-
     print(f'query is {query}')
     session = Session()
 
@@ -236,15 +237,19 @@ sql_tool = Tool(
         '''
 )
 
+# memory = ConversationBufferMemory(
+#     memory_key="chat_history", return_messages=True)
 
-agent = initialize_agent(
-    tools=[sql_tool, sentiment_tool,
-           product_sentiment_tool, trend_sentiment_tool],
-    llm=ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash", temperature=0, api_key=google_api_key),
-    agent="zero-shot-react-description",
-    verbose=True
-)
+
+# agent = initialize_agent(
+#     tools=[sql_tool, sentiment_tool,
+#            product_sentiment_tool, trend_sentiment_tool],
+#     llm=ChatGoogleGenerativeAI(
+#         model="gemini-1.5-flash", temperature=0, api_key=google_api_key),
+#     agent="zero-shot-react-description",
+#     verbose=True,
+#     memory=memory
+# )
 
 
 # print('''Welcome to the BigQuery conversational assistant!\n
@@ -252,8 +257,11 @@ agent = initialize_agent(
 # or 'Show me sales from last month. \n
 # Type 'exit' to end the conversation.\n''')
 
-# while True:
+# initial_message = "You are an AI assistant that can provide helpful answers using available tools and if you cant answer with available tools you can use your own reasoning."
+# memory.chat_memory.add_message(SystemMessage(content=initial_message))
 
+
+# while True:
 #     user_input = input("You: ")
 
 #     if user_input.lower() == "exit":
@@ -261,45 +269,89 @@ agent = initialize_agent(
 #         break
 
 #     try:
-#         # response = agent.run(user_input)
+#         memory.chat_memory.add_message(HumanMessage(content=user_input))
+
 #         response = agent.invoke(user_input)
 
-#         print(f"Agent: {response}\n")
+#         memory.chat_memory.add_message(AIMessage(content=response["output"]))
+
+#         print(f"Agent: {response["output"]}\n")
+
 #     except Exception as e:
-#         print(f"Agent: Sorry, I encountered an error: {e}\n")
+#         print(f"Agent: Sorry, I encountered an error: {e}\n")
 
 
 # Streamlit UI
-# Streamlit UI
+
+
+if "memory" not in st.session_state:
+    initial_message = "You are an AI assistant that can provide helpful answers using available tools and if you can't answer with available tools you can use your own reasoning.You also have memory and you can use it to remember previous messages"
+    memory = ConversationBufferMemory(
+        memory_key="chat_history", return_messages=True)
+    memory.chat_memory.add_message(SystemMessage(
+        content=initial_message))
+    st.session_state["memory"] = memory
+else:
+    memory = st.session_state["memory"]
+
+
+agent = initialize_agent(
+    tools=[sql_tool, sentiment_tool,
+           product_sentiment_tool, trend_sentiment_tool],
+    llm=ChatGoogleGenerativeAI(
+        model="gemini-1.5-flash", temperature=0, api_key=google_api_key),
+    agent="zero-shot-react-description",
+    verbose=True,
+    memory=memory
+)
+
+
 st.set_page_config(page_title="Chatbot", page_icon="💬", layout="wide")
 st.title("💬 Assistant Chatbot")
 st.markdown("Chat with your BigQuery database using AI-powered insights.")
 
-# Initialize session state
+
 if "messages" not in st.session_state:
     st.session_state["messages"] = []
 
-# Display message history
+
 for message in st.session_state["messages"]:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# User input
+
 user_input = st.chat_input("Ask something about your database...")
 if user_input:
+
     st.session_state["messages"].append(
         {"role": "user", "content": user_input})
+
     with st.chat_message("user"):
         st.markdown(user_input)
 
-    # Get response from the agent
+    memory.chat_memory.add_message(HumanMessage(content=user_input))
+
     try:
+
         response = agent.invoke(user_input)
+
+        memory.chat_memory.add_message(AIMessage(content=response["output"]))
+
+        st.session_state["messages"].append(
+            {"role": "assistant", "content": response['output']})
+
+        with st.chat_message("assistant"):
+            st.markdown(response['output'])
+
     except Exception as e:
         response = f"Error: {e}"
+        st.session_state["messages"].append(
+            {"role": "assistant", "content": response})
+        with st.chat_message("assistant"):
+            st.markdown(response)
 
-    # Display response
-    st.session_state["messages"].append(
-        {"role": "assistant", "content": response['output']})
-    with st.chat_message("assistant"):
-        st.markdown(response['output'])
+    # Print memory to the terminal (for debugging)
+
+    print("### Current Memory:")
+    for message in memory.chat_memory.messages:
+        print(message)
